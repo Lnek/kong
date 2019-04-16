@@ -156,6 +156,32 @@ local function load_plugin_entity_strategy(schema, db)
   if not strategy then
     return nil, err
   end
+
+  local custom_strat = fmt("kong.db.strategies.%s.%s", db.strategy, schema.name)
+  local exists, mod = utils.load_module_if_exists(custom_strat)
+  if exists and mod then
+    local parent_mt = getmetatable(strategy)
+    local mt = {
+      __index = function(t, k)
+        -- explicit parent
+        if k == "super" then
+          return parent_mt
+        end
+
+        -- override
+        local f = mod[k]
+        if f then
+          return f
+        end
+
+        -- parent fallback
+        return parent_mt[k]
+      end
+    }
+
+    setmetatable(strategy, mt)
+  end
+
   db.strategies[schema.name] = strategy
 
   local dao, err = DAO.new(db, schema, strategy, db.errors)
